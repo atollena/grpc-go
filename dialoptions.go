@@ -112,9 +112,7 @@ func newFuncDialOption(f func(*dialOptions)) *funcDialOption {
 }
 
 // WithWriteBufferSize determines how much data can be batched before doing a
-// write on the wire. The corresponding memory allocation for this buffer will
-// be twice the size to keep syscalls low. The default value for this buffer is
-// 32KB.
+// write on the wire. The default value for this buffer is 32KB.
 //
 // Zero will disable the write buffer such that each write will be on underlying
 // connection. Note: A Send call may not directly translate to a write.
