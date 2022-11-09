@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"google.golang.org/grpc/internal/transport/dynbufio"
 	"io"
 	"math"
 	"net"
@@ -174,6 +175,7 @@ type serverOptions struct {
 	maxHeaderListSize     *uint32
 	headerTableSize       *uint32
 	numServerWorkers      uint32
+	dynBufferPool         bool
 }
 
 var defaultServerOptions = serverOptions{
@@ -251,6 +253,20 @@ func WriteBufferSize(s int) ServerOption {
 func ReadBufferSize(s int) ServerOption {
 	return newFuncServerOption(func(o *serverOptions) {
 		o.readBufferSize = s
+	})
+}
+
+// DynamicBuffers toggles dynamic sizing for transport buffers. If enabled, the transport read and write
+// buffers grow and shrink depending on the activity on the transport, and ReadBufferSize and WriteBufferSize
+// are ignored. The default value is false.
+//
+// # Experimental
+//
+// Notice: This API is EXPERIMENTAL and may be changed or removed in a
+// later release.
+func DynamicBuffers(enabled bool) ServerOption {
+	return newFuncServerOption(func(o *serverOptions) {
+		o.dynBufferPool = enabled
 	})
 }
 
@@ -904,6 +920,11 @@ func (s *Server) drainServerTransports(addr string) {
 // newHTTP2Transport sets up a http/2 transport (using the
 // gRPC http2 server transport in transport/http2_server.go).
 func (s *Server) newHTTP2Transport(c net.Conn) transport.ServerTransport {
+	var transportBufferPool *dynbufio.BufferPool
+	if s.opts.dynBufferPool {
+		// TODO: make size configurable?
+		transportBufferPool = dynbufio.NewBufferPool(4096, 65536)
+	}
 	config := &transport.ServerConfig{
 		MaxStreams:            s.opts.maxConcurrentStreams,
 		ConnectionTimeout:     s.opts.connectionTimeout,
@@ -919,6 +940,7 @@ func (s *Server) newHTTP2Transport(c net.Conn) transport.ServerTransport {
 		ChannelzParentID:      s.channelzID,
 		MaxHeaderListSize:     s.opts.maxHeaderListSize,
 		HeaderTableSize:       s.opts.headerTableSize,
+		TransportBufferPool:   transportBufferPool,
 	}
 	st, err := transport.NewServerTransport(c, config)
 	if err != nil {

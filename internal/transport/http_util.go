@@ -22,6 +22,7 @@ import (
 	"bufio"
 	"encoding/base64"
 	"fmt"
+	"google.golang.org/grpc/internal/transport/dynbufio"
 	"io"
 	"math"
 	"net"
@@ -332,7 +333,7 @@ type framer struct {
 	fr     *http2.Framer
 }
 
-func newFramer(conn net.Conn, writeBufferSize, readBufferSize int, maxHeaderListSize uint32) *framer {
+func newFramer(conn net.Conn, writeBufferSize, readBufferSize int, maxHeaderListSize uint32, pool *dynbufio.BufferPool) *framer {
 	if writeBufferSize < 0 {
 		writeBufferSize = 0
 	}
@@ -341,7 +342,9 @@ func newFramer(conn net.Conn, writeBufferSize, readBufferSize int, maxHeaderList
 		r = bufio.NewReaderSize(r, readBufferSize)
 	}
 	var w writer = connwriter{conn}
-	if writeBufferSize > 0 {
+	if pool != nil {
+		w = pool.NewWriteBuffer(conn)
+	} else if writeBufferSize > 0 {
 		w = bufio.NewWriterSize(conn, writeBufferSize)
 	}
 	f := &framer{

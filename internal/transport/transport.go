@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"google.golang.org/grpc/internal/transport/dynbufio"
 	"io"
 	"net"
 	"sync"
@@ -543,6 +544,7 @@ type ServerConfig struct {
 	ChannelzParentID      *channelz.Identifier
 	MaxHeaderListSize     *uint32
 	HeaderTableSize       *uint32
+	TransportBufferPool   *dynbufio.BufferPool
 }
 
 // ConnectOptions covers all relevant options for communicating with the server.

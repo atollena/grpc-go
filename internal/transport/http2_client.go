@@ -21,6 +21,7 @@ package transport
 import (
 	"context"
 	"fmt"
+	"google.golang.org/grpc/internal/transport/dynbufio"
 	"io"
 	"math"
 	"net"
@@ -145,7 +146,8 @@ type http2Client struct {
 
 	bufferPool *bufferPool
 
-	connectionID uint64
+	connectionID   uint64
+	connBufferPool *dynbufio.BufferPool
 }
 
 func dial(ctx context.Context, fn func(context.Context, string) (net.Conn, error), addr resolver.Address, useProxy bool, grpcUA string) (net.Conn, error) {
@@ -326,7 +328,7 @@ func newHTTP2Client(connectCtx, ctx context.Context, addr resolver.Address, opts
 		readerDone:            make(chan struct{}),
 		writerDone:            make(chan struct{}),
 		goAway:                make(chan struct{}),
-		framer:                newFramer(conn, writeBufSize, readBufSize, maxHeaderListSize),
+		framer:                newFramer(conn, writeBufSize, readBufSize, maxHeaderListSize, nil), // TODO: support dynamic buffer sizes
 		fc:                    &trInFlow{limit: uint32(icwz)},
 		scheme:                scheme,
 		activeStreams:         make(map[uint32]*Stream),
