@@ -333,17 +333,19 @@ type framer struct {
 	fr     *http2.Framer
 }
 
-func newFramer(conn net.Conn, writeBufferSize, readBufferSize int, maxHeaderListSize uint32, pool *dynbufio.BufferPool) *framer {
+func newFramer(conn net.Conn, writeBufferSize, readBufferSize int, maxHeaderListSize uint32, writerPool *dynbufio.WriteBufferPool, readerPool *dynbufio.ReadBufferPool) *framer {
 	if writeBufferSize < 0 {
 		writeBufferSize = 0
 	}
 	var r io.Reader = conn
-	if readBufferSize > 0 {
+	if readerPool != nil {
+		r = readerPool.NewReaderBuffer(conn)
+	} else if readBufferSize > 0 {
 		r = bufio.NewReaderSize(r, readBufferSize)
 	}
 	var w writer = connwriter{conn}
-	if pool != nil {
-		w = pool.NewWriteBuffer(conn)
+	if writerPool != nil {
+		w = writerPool.NewWriteBuffer(conn)
 	} else if writeBufferSize > 0 {
 		w = bufio.NewWriterSize(conn, writeBufferSize)
 	}

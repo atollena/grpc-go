@@ -3,16 +3,40 @@ package dynbufio
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"strings"
 	"testing"
 )
 
-func TestWriter(t *testing.T) {
-	var data [32768]byte
+func getData(l int) []byte {
+	var data = make([]byte, l)
 
-	for i := 0; i < len(data); i++ {
+	for i := 0; i < l; i++ {
 		data[i] = byte(' ' + i%('~'-' '))
 	}
+	return data
+}
 
+func TestReaderSimple(t *testing.T) {
+	pool := NewReadBufferPool(8, 64)
+
+	data := getData(256)
+	b := pool.NewReaderBuffer(strings.NewReader(string(data)))
+	s := make([]byte, len(data))
+	n, err := io.ReadFull(b, s)
+	if n != len(data) {
+		t.Errorf("simple reader test failed: read %d bytes %s", n, string(s))
+	}
+	if err != nil {
+		t.Errorf("simple reader test failed: got error %s", err.Error())
+	}
+	if !bytes.Equal(s, data) {
+		t.Errorf("simple reader test failed: got %q", s)
+	}
+}
+
+func TestWriter(t *testing.T) {
+	data := getData(32 * 1024)
 	w := new(bytes.Buffer)
 
 	// XXX switch to anonymous structs
@@ -22,7 +46,7 @@ func TestWriter(t *testing.T) {
 	for _, sizes := range poolSizes {
 		minSize := sizes[0]
 		maxSize := sizes[1]
-		pool := NewBufferPool(minSize, maxSize)
+		pool := NewWriterBufferPool(minSize, maxSize)
 		for nwrite := range nwrites {
 			context := fmt.Sprintf("nwrite=%d minSize=%d maxSizes=%d", nwrite, minSize, maxSize)
 			w.Reset()
@@ -61,7 +85,7 @@ func TestWriterGrowShrink(t *testing.T) {
 	minSize := 4
 	maxSize := 32
 	w := new(bytes.Buffer)
-	pool := NewBufferPool(minSize, maxSize)
+	pool := NewWriterBufferPool(minSize, maxSize)
 	buf := pool.NewWriteBuffer(w)
 
 	if buf.Size() != minSize {
