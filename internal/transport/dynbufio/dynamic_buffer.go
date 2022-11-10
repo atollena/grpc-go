@@ -20,7 +20,7 @@ type BufferPool struct {
 	maxIdx int
 }
 
-func (emptyWriterT) Write(p []byte) (n int, err error) {
+func (emptyWriterT) Write(_ []byte) (n int, err error) {
 	return 0, errors.New("write on empty writer")
 }
 
@@ -50,7 +50,7 @@ func NewBufferPool(minSize int, maxSize int) *BufferPool {
 }
 
 type DynamicBufWriter struct {
-	*bufio.Writer
+	buf     *bufio.Writer // TODO: this should be private and explicitly forward Write([]byte), Flush(), and Buffered()
 	w       io.Writer
 	pool    *BufferPool
 	poolIdx int
@@ -59,51 +59,69 @@ type DynamicBufWriter struct {
 func (bp *BufferPool) NewWriteBuffer(w io.Writer) *DynamicBufWriter {
 	bw := bp.pools[0].Get().(*bufio.Writer)
 	bw.Reset(w)
-	return &DynamicBufWriter{Writer: bw, pool: bp, w: w}
+	return &DynamicBufWriter{buf: bw, pool: bp, w: w}
+}
+
+func (dbw *DynamicBufWriter) Buffered() int {
+	return dbw.buf.Buffered()
+}
+
+func (dbw *DynamicBufWriter) Size() int {
+	return dbw.buf.Size()
 }
 
 func (dbw *DynamicBufWriter) Write(p []byte) (int, error) {
 	shouldGrow := false
-	if len(p) > dbw.Available() && dbw.poolIdx < dbw.pool.maxIdx {
+	if len(p) > dbw.buf.Available() {
 		shouldGrow = true
 	}
-	n, err := dbw.Writer.Write(p)
-	dbw.pool.pools[dbw.poolIdx].Put(dbw.Writer)
+	n, err := dbw.buf.Write(p)
+
 	if shouldGrow {
-		dbw.poolIdx++
-		dbw.Writer = dbw.pool.pools[dbw.poolIdx].Get().(*bufio.Writer)
-		dbw.Writer.Reset(dbw.w)
+		dbw.grow()
 	}
 	return n, err
 }
 
+func (dbw *DynamicBufWriter) grow() {
+	if dbw.poolIdx < dbw.pool.maxIdx {
+		dbw.buf.Reset(emptyWriter)
+		dbw.pool.pools[dbw.poolIdx].Put(dbw.buf)
+		dbw.poolIdx++
+		dbw.buf = dbw.pool.pools[dbw.poolIdx].Get().(*bufio.Writer)
+		dbw.buf.Reset(dbw.w)
+	}
+}
+
+func (dbw *DynamicBufWriter) shrink() {
+	if dbw.poolIdx != 0 {
+		dbw.buf.Reset(emptyWriter)
+		dbw.pool.pools[dbw.poolIdx].Put(dbw.buf)
+		dbw.poolIdx--
+		dbw.buf = dbw.pool.pools[dbw.poolIdx].Get().(*bufio.Writer)
+		dbw.buf.Reset(dbw.w)
+	}
+}
+
 func (dbw *DynamicBufWriter) Flush() error {
-	// only shrink here
 	shouldGrow := false
 	shouldShrink := false
-	buffered := dbw.Buffered()
-	size := dbw.Size()
+	buffered := dbw.buf.Buffered()
+	size := dbw.buf.Size()
 	if buffered == size && dbw.poolIdx < dbw.pool.maxIdx {
 		shouldGrow = true
-	} else if buffered < size/2 && dbw.poolIdx != 0 {
+	} else if buffered < size/2 {
 		shouldShrink = true
 	}
 
-	err := dbw.Writer.Flush()
+	err := dbw.buf.Flush()
 	if err != nil {
 		return err
 	}
-	if !shouldGrow && !shouldShrink {
-		return nil
-	}
-	dbw.pool.pools[dbw.poolIdx].Put(dbw.Writer)
 	if shouldGrow {
-		dbw.poolIdx++
-	} else {
-		// should shrink
-		dbw.poolIdx--
+		dbw.grow()
+	} else if shouldShrink {
+		dbw.shrink()
 	}
-	dbw.Writer = dbw.pool.pools[dbw.poolIdx].Get().(*bufio.Writer)
-	dbw.Writer.Reset(dbw.w)
 	return nil
 }
