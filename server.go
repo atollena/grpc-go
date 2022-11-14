@@ -920,30 +920,27 @@ func (s *Server) drainServerTransports(addr string) {
 // newHTTP2Transport sets up a http/2 transport (using the
 // gRPC http2 server transport in transport/http2_server.go).
 func (s *Server) newHTTP2Transport(c net.Conn) transport.ServerTransport {
-	var transportWriteBufferPool *dynbufio.WriteBufferPool
-	var transportReadBufferPool *dynbufio.ReadBufferPool
+	var transportBufferPool *dynbufio.BufferPool
 	if s.opts.dynBufferPool {
 		// TODO: make size configurable?
-		transportWriteBufferPool = dynbufio.NewWriterBufferPool(4096, 65536)
-		transportReadBufferPool = dynbufio.NewReadBufferPool(4096, 65536)
+		transportBufferPool = dynbufio.NewPool(1024, 1024*1024)
 	}
 	config := &transport.ServerConfig{
-		MaxStreams:               s.opts.maxConcurrentStreams,
-		ConnectionTimeout:        s.opts.connectionTimeout,
-		Credentials:              s.opts.creds,
-		InTapHandle:              s.opts.inTapHandle,
-		StatsHandlers:            s.opts.statsHandlers,
-		KeepaliveParams:          s.opts.keepaliveParams,
-		KeepalivePolicy:          s.opts.keepalivePolicy,
-		InitialWindowSize:        s.opts.initialWindowSize,
-		InitialConnWindowSize:    s.opts.initialConnWindowSize,
-		WriteBufferSize:          s.opts.writeBufferSize,
-		ReadBufferSize:           s.opts.readBufferSize,
-		ChannelzParentID:         s.channelzID,
-		MaxHeaderListSize:        s.opts.maxHeaderListSize,
-		HeaderTableSize:          s.opts.headerTableSize,
-		TransportWriteBufferPool: transportWriteBufferPool,
-		TransportReadBufferPool:  transportReadBufferPool,
+		MaxStreams:            s.opts.maxConcurrentStreams,
+		ConnectionTimeout:     s.opts.connectionTimeout,
+		Credentials:           s.opts.creds,
+		InTapHandle:           s.opts.inTapHandle,
+		StatsHandlers:         s.opts.statsHandlers,
+		KeepaliveParams:       s.opts.keepaliveParams,
+		KeepalivePolicy:       s.opts.keepalivePolicy,
+		InitialWindowSize:     s.opts.initialWindowSize,
+		InitialConnWindowSize: s.opts.initialConnWindowSize,
+		WriteBufferSize:       s.opts.writeBufferSize,
+		ReadBufferSize:        s.opts.readBufferSize,
+		ChannelzParentID:      s.channelzID,
+		MaxHeaderListSize:     s.opts.maxHeaderListSize,
+		HeaderTableSize:       s.opts.headerTableSize,
+		TransportBufferPool:   transportBufferPool,
 	}
 	st, err := transport.NewServerTransport(c, config)
 	if err != nil {

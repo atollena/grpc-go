@@ -4,10 +4,13 @@ import (
 	"bufio"
 	"errors"
 	"io"
+	"net"
+	"os"
 	"sync"
+	"time"
 )
 
-const minWriteBufferSize = 4096
+const minWriteBufferSize = 1024
 
 // XXX explain the purpose
 type failingReadWriterT struct{}
@@ -22,12 +25,13 @@ func (failingReadWriterT) Read(_ []byte) (n int, err error) {
 	return 0, errors.New("read on failing writer")
 }
 
-type WriteBufferPool struct {
-	pools  []sync.Pool
-	maxIdx int
+type BufferPool struct {
+	readerPools []sync.Pool
+	writerPools []sync.Pool
+	maxIdx      int
 }
 
-func NewWriterBufferPool(minSize int, maxSize int) *WriteBufferPool {
+func NewPool(minSize int, maxSize int) *BufferPool {
 	if minSize <= 0 {
 		minSize = minWriteBufferSize
 	}
@@ -37,30 +41,36 @@ func NewWriterBufferPool(minSize int, maxSize int) *WriteBufferPool {
 		sizes = append(sizes, minSize)
 	}
 
-	var pools []sync.Pool
+	var writerPools, readerPools []sync.Pool
 	for _, s := range sizes {
 		size := s
-		pools = append(pools, sync.Pool{
+		writerPools = append(writerPools, sync.Pool{
 			New: func() interface{} {
 				return bufio.NewWriterSize(failingReadWriter, size)
 			},
 		})
+		readerPools = append(readerPools, sync.Pool{
+			New: func() interface{} {
+				return bufio.NewReaderSize(failingReadWriter, size)
+			},
+		})
 	}
-	return &WriteBufferPool{
-		pools:  pools,
-		maxIdx: len(sizes) - 1,
+	return &BufferPool{
+		writerPools: writerPools,
+		readerPools: readerPools,
+		maxIdx:      len(sizes) - 1,
 	}
 }
 
 type DynamicBufWriter struct {
 	buf     *bufio.Writer
 	w       io.Writer
-	pool    *WriteBufferPool
+	pool    *BufferPool
 	poolIdx int
 }
 
-func (bp *WriteBufferPool) NewWriteBuffer(w io.Writer) *DynamicBufWriter {
-	bw := bp.pools[0].Get().(*bufio.Writer)
+func (bp *BufferPool) NewWriteBuffer(w io.Writer) *DynamicBufWriter {
+	bw := bp.writerPools[0].Get().(*bufio.Writer)
 	bw.Reset(w)
 	return &DynamicBufWriter{buf: bw, pool: bp, w: w}
 }
@@ -86,26 +96,6 @@ func (dbw *DynamicBufWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-func (dbw *DynamicBufWriter) grow() {
-	if dbw.poolIdx < dbw.pool.maxIdx {
-		dbw.buf.Reset(failingReadWriter)
-		dbw.pool.pools[dbw.poolIdx].Put(dbw.buf)
-		dbw.poolIdx++
-		dbw.buf = dbw.pool.pools[dbw.poolIdx].Get().(*bufio.Writer)
-		dbw.buf.Reset(dbw.w)
-	}
-}
-
-func (dbw *DynamicBufWriter) shrink() {
-	if dbw.poolIdx != 0 {
-		dbw.buf.Reset(failingReadWriter)
-		dbw.pool.pools[dbw.poolIdx].Put(dbw.buf)
-		dbw.poolIdx--
-		dbw.buf = dbw.pool.pools[dbw.poolIdx].Get().(*bufio.Writer)
-		dbw.buf.Reset(dbw.w)
-	}
-}
-
 func (dbw *DynamicBufWriter) Flush() error {
 	shouldGrow := false
 	shouldShrink := false
@@ -129,56 +119,59 @@ func (dbw *DynamicBufWriter) Flush() error {
 	return nil
 }
 
-type ReadBufferPool struct {
-	pools  []sync.Pool
-	maxIdx int
+func (dbw *DynamicBufWriter) grow() {
+	if dbw.poolIdx < dbw.pool.maxIdx {
+		dbw.buf.Reset(failingReadWriter)
+		dbw.pool.writerPools[dbw.poolIdx].Put(dbw.buf)
+		dbw.poolIdx++
+		dbw.buf = dbw.pool.writerPools[dbw.poolIdx].Get().(*bufio.Writer)
+		dbw.buf.Reset(dbw.w)
+	}
+}
+
+func (dbw *DynamicBufWriter) shrink() {
+	if dbw.poolIdx != 0 {
+		dbw.buf.Reset(failingReadWriter)
+		dbw.pool.writerPools[dbw.poolIdx].Put(dbw.buf)
+		dbw.poolIdx--
+		dbw.buf = dbw.pool.writerPools[dbw.poolIdx].Get().(*bufio.Writer)
+		dbw.buf.Reset(dbw.w)
+	}
 }
 
 type DynamicBufReader struct {
 	buf     *bufio.Reader
 	r       io.Reader
-	pool    *ReadBufferPool
+	pool    *BufferPool
 	poolIdx int
 }
 
-func NewReadBufferPool(minSize int, maxSize int) *ReadBufferPool {
-	if minSize <= 0 {
-		minSize = minWriteBufferSize
-	}
-	sizes := []int{minSize}
-	for minSize < maxSize {
-		minSize = minSize << 1
-		sizes = append(sizes, minSize)
-	}
-
-	var pools []sync.Pool
-	for _, s := range sizes {
-		size := s
-		pools = append(pools, sync.Pool{
-			New: func() interface{} {
-				return bufio.NewReaderSize(failingReadWriter, size)
-			},
-		})
-	}
-	return &ReadBufferPool{
-		pools:  pools,
-		maxIdx: len(sizes) - 1,
-	}
-}
-
-func (bp *ReadBufferPool) NewReaderBuffer(r io.Reader) *DynamicBufReader {
-	bw := bp.pools[0].Get().(*bufio.Reader)
+func (bp *BufferPool) NewReaderBuffer(r io.Reader) *DynamicBufReader {
+	bw := bp.readerPools[0].Get().(*bufio.Reader)
 	bw.Reset(r)
 	return &DynamicBufReader{buf: bw, pool: bp, r: r}
 }
 
 func (dbr *DynamicBufReader) Read(p []byte) (n int, err error) {
+	conn, ok := dbr.r.(net.Conn)
+	if ok {
+		if dbr.poolIdx != 0 {
+			conn.SetReadDeadline(time.Now().Add(10 * time.Second)) // TODO: make that configurable or tune?
+		} else {
+			conn.SetReadDeadline(time.Time{})
+		}
+	}
+
 	if dbr.buf.Buffered() != 0 {
 		// we have data buffered, guaranteed to not trigger an underlying read,
 		// so we can't learn anything about buffer sizing here.
 		return dbr.buf.Read(p)
 	}
 	n, err = dbr.buf.Read(p)
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		dbr.shrink()
+		return dbr.Read(p)
+	}
 	if n+dbr.buf.Buffered() >= dbr.buf.Size() {
 		// we read more data than buf capacity
 		// note that this can be because len(p) > buf.Size(), bypassing the buffer.
@@ -193,9 +186,9 @@ func (dbr *DynamicBufReader) Read(p []byte) (n int, err error) {
 func (dbr *DynamicBufReader) grow() {
 	if dbr.poolIdx < dbr.pool.maxIdx {
 		dbr.buf.Reset(failingReadWriter)
-		dbr.pool.pools[dbr.poolIdx].Put(dbr.buf)
+		dbr.pool.readerPools[dbr.poolIdx].Put(dbr.buf)
 		dbr.poolIdx++
-		dbr.buf = dbr.pool.pools[dbr.poolIdx].Get().(*bufio.Reader)
+		dbr.buf = dbr.pool.readerPools[dbr.poolIdx].Get().(*bufio.Reader)
 		dbr.buf.Reset(dbr.r)
 	}
 }
@@ -203,9 +196,9 @@ func (dbr *DynamicBufReader) grow() {
 func (dbr *DynamicBufReader) shrink() {
 	if dbr.poolIdx != 0 {
 		dbr.buf.Reset(failingReadWriter)
-		dbr.pool.pools[dbr.poolIdx].Put(dbr.buf)
+		dbr.pool.readerPools[dbr.poolIdx].Put(dbr.buf)
 		dbr.poolIdx--
-		dbr.buf = dbr.pool.pools[dbr.poolIdx].Get().(*bufio.Reader)
+		dbr.buf = dbr.pool.readerPools[dbr.poolIdx].Get().(*bufio.Reader)
 		dbr.buf.Reset(dbr.r)
 	}
 }

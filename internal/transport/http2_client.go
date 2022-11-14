@@ -147,7 +147,7 @@ type http2Client struct {
 	bufferPool *bufferPool
 
 	connectionID   uint64
-	connBufferPool *dynbufio.WriteBufferPool
+	connBufferPool *dynbufio.BufferPool
 }
 
 func dial(ctx context.Context, fn func(context.Context, string) (net.Conn, error), addr resolver.Address, useProxy bool, grpcUA string) (net.Conn, error) {
@@ -328,7 +328,7 @@ func newHTTP2Client(connectCtx, ctx context.Context, addr resolver.Address, opts
 		readerDone:            make(chan struct{}),
 		writerDone:            make(chan struct{}),
 		goAway:                make(chan struct{}),
-		framer:                newFramer(conn, writeBufSize, readBufSize, maxHeaderListSize, nil, nil), // TODO: support dynamic buffers
+		framer:                newFramer(conn, writeBufSize, readBufSize, maxHeaderListSize, nil), // TODO: support dynamic buffers
 		fc:                    &trInFlow{limit: uint32(icwz)},
 		scheme:                scheme,
 		activeStreams:         make(map[uint32]*Stream),

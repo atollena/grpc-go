@@ -530,22 +530,21 @@ const (
 
 // ServerConfig consists of all the configurations to establish a server transport.
 type ServerConfig struct {
-	MaxStreams               uint32
-	ConnectionTimeout        time.Duration
-	Credentials              credentials.TransportCredentials
-	InTapHandle              tap.ServerInHandle
-	StatsHandlers            []stats.Handler
-	KeepaliveParams          keepalive.ServerParameters
-	KeepalivePolicy          keepalive.EnforcementPolicy
-	InitialWindowSize        int32
-	InitialConnWindowSize    int32
-	WriteBufferSize          int
-	ReadBufferSize           int
-	ChannelzParentID         *channelz.Identifier
-	MaxHeaderListSize        *uint32
-	HeaderTableSize          *uint32
-	TransportWriteBufferPool *dynbufio.WriteBufferPool
-	TransportReadBufferPool  *dynbufio.ReadBufferPool
+	MaxStreams            uint32
+	ConnectionTimeout     time.Duration
+	Credentials           credentials.TransportCredentials
+	InTapHandle           tap.ServerInHandle
+	StatsHandlers         []stats.Handler
+	KeepaliveParams       keepalive.ServerParameters
+	KeepalivePolicy       keepalive.EnforcementPolicy
+	InitialWindowSize     int32
+	InitialConnWindowSize int32
+	WriteBufferSize       int
+	ReadBufferSize        int
+	ChannelzParentID      *channelz.Identifier
+	MaxHeaderListSize     *uint32
+	HeaderTableSize       *uint32
+	TransportBufferPool   *dynbufio.BufferPool
 }
 
 // ConnectOptions covers all relevant options for communicating with the server.

@@ -18,7 +18,7 @@ func getData(l int) []byte {
 }
 
 func TestReaderSimple(t *testing.T) {
-	pool := NewReadBufferPool(8, 64)
+	pool := NewPool(8, 64)
 
 	data := getData(256)
 	b := pool.NewReaderBuffer(strings.NewReader(string(data)))
@@ -46,7 +46,7 @@ func TestWriter(t *testing.T) {
 	for _, sizes := range poolSizes {
 		minSize := sizes[0]
 		maxSize := sizes[1]
-		pool := NewWriterBufferPool(minSize, maxSize)
+		pool := NewPool(minSize, maxSize)
 		for nwrite := range nwrites {
 			context := fmt.Sprintf("nwrite=%d minSize=%d maxSizes=%d", nwrite, minSize, maxSize)
 			w.Reset()
@@ -85,7 +85,7 @@ func TestWriterGrowShrink(t *testing.T) {
 	minSize := 4
 	maxSize := 32
 	w := new(bytes.Buffer)
-	pool := NewWriterBufferPool(minSize, maxSize)
+	pool := NewPool(minSize, maxSize)
 	buf := pool.NewWriteBuffer(w)
 
 	if buf.Size() != minSize {
