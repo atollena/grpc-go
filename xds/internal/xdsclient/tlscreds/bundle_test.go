@@ -57,24 +57,18 @@ func TestFailingProvider(t *testing.T) {
 		grpc.WithCredentialsBundle(tlsBundle),
 		grpc.WithAuthority("x.test.example.com"),
 	}
-
-	// Check that if the provider returns an errors, we fail the handshake.
-	// It's not easy to trigger this condition, so we rely on closing the
-	// provider.
 	creds, ok := tlsBundle.TransportCredentials().(*reloadingCreds)
 	if !ok {
 		t.Fatalf("Got %T, expected reloadingCreds", tlsBundle.TransportCredentials())
 	}
 
-	// Force the provider to be initialized. The test is flaky otherwise,
-	// since close may be a noop.
-	_, _ = creds.provider.KeyMaterial(context.Background())
-
-	creds.provider.Close()
-
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTestTimeout)
 	defer cancel()
 
+	// Check that if the provider returns an errors, we fail the handshake.
+	// It's not easy to trigger this condition, so we rely on closing the
+	// provider. We can only close the provider after it is initialized.
+	creds.provider.Close()
 	for ; ctx.Err() == nil; <-time.After(10 * time.Millisecond) {
 		conn, err := grpc.Dial(s.Address, dialOpts...)
 		if err != nil {

@@ -20,6 +20,7 @@ package certprovider
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"google.golang.org/grpc/internal/grpcsync"
@@ -84,8 +85,10 @@ func (d *Distributor) Set(km *KeyMaterial, err error) {
 // the deadline on the context expires or fresh key material arrives.
 func (d *Distributor) KeyMaterial(ctx context.Context) (*KeyMaterial, error) {
 	if d.closed.HasFired() {
+		fmt.Printf("getting material from distributor %p is closed\n", d)
 		return nil, errProviderClosed
 	}
+	fmt.Printf("getting material from distributor %p is not closed\n", d)
 
 	if d.ready.HasFired() {
 		return d.keyMaterial()
@@ -110,5 +113,6 @@ func (d *Distributor) keyMaterial() (*KeyMaterial, error) {
 // Stop turns down the distributor, releases allocated resources and fails any
 // active KeyMaterial() call waiting for new key material.
 func (d *Distributor) Stop() {
+	fmt.Printf("closing distributor %p\n", d)
 	d.closed.Fire()
 }

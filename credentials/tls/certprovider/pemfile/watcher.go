@@ -34,6 +34,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"time"
 
 	"google.golang.org/grpc/credentials/tls/certprovider"
@@ -101,6 +102,8 @@ func NewProvider(o Options) (certprovider.Provider, error) {
 // newProvider is used to create a new certificate provider plugin after
 // validating the options, and hence does not return an error.
 func newProvider(o Options) certprovider.Provider {
+	fmt.Println("calling newProvider")
+	debug.PrintStack()
 	if o.RefreshDuration == 0 {
 		o.RefreshDuration = defaultCertRefreshDuration
 	}
@@ -220,6 +223,7 @@ func (w *watcher) run(ctx context.Context) {
 		w.updateRootDistributor()
 		select {
 		case <-ctx.Done():
+			fmt.Printf("watcher run: closing distributors %p and %p\n", w.identityDistributor, w.rootDistributor)
 			ticker.Stop()
 			if w.identityDistributor != nil {
 				w.identityDistributor.Stop()
@@ -236,6 +240,7 @@ func (w *watcher) run(ctx context.Context) {
 // KeyMaterial returns the key material sourced by the watcher.
 // Callers are expected to use the returned value as read-only.
 func (w *watcher) KeyMaterial(ctx context.Context) (*certprovider.KeyMaterial, error) {
+	fmt.Printf("getting material from provider %p\n", w)
 	km := &certprovider.KeyMaterial{}
 	if w.identityDistributor != nil {
 		identityKM, err := w.identityDistributor.KeyMaterial(ctx)
@@ -256,5 +261,6 @@ func (w *watcher) KeyMaterial(ctx context.Context) (*certprovider.KeyMaterial, e
 
 // Close cleans up resources allocated by the watcher.
 func (w *watcher) Close() {
+	fmt.Printf("closing provider %p\n", w)
 	w.cancel()
 }

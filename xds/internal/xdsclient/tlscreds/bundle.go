@@ -82,6 +82,7 @@ func NewBundle(jd json.RawMessage) (credentials.Bundle, error) {
 }
 
 func (t *bundle) TransportCredentials() credentials.TransportCredentials {
+	fmt.Printf("bundle.TransportCredentials(): %v\n", t.transportCredentials)
 	return t.transportCredentials
 }
 
@@ -107,6 +108,7 @@ type reloadingCreds struct {
 }
 
 func (c *reloadingCreds) ClientHandshake(ctx context.Context, authority string, rawConn net.Conn) (net.Conn, credentials.AuthInfo, error) {
+	fmt.Printf("reloadingCreds.ClientHandshake() provider: %p\n", c.provider)
 	km, err := c.provider.KeyMaterial(ctx)
 	if err != nil {
 		return nil, nil, err

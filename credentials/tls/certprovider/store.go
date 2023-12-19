@@ -152,5 +152,6 @@ func GetProvider(name string, config any, opts BuildOptions) (Provider, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("getprovider called\n")
 	return bc.Build(opts)
 }
