@@ -51,20 +51,52 @@ func Test(t *testing.T) {
 }
 
 func (s) TestValidTlsBuilder(t *testing.T) {
+	serverCaCert := testdata.Path("x509/server_ca_cert.pem")
+	serverCert := testdata.Path("x509/server_cert.pem")
+	serverKey := testdata.Path("x509/server_key.pem")
 	tests := []struct {
 		name string
 		jd   string
 	}{
-		{name: "Absent configuration", jd: `null`},
-		{name: "Empty configuration", jd: `{}`},
-		{name: "Only CA certificate chain", jd: `{"ca_certificate_file": "foo"}`},
-		{name: "Only private key and certificate chain", jd: `{"certificate_file":"bar","private_key_file":"baz"}`},
-		{name: "CA chain, private key and certificate chain", jd: `{"ca_certificate_file":"foo","certificate_file":"bar","private_key_file":"baz"}`},
-		{name: "Only refresh interval", jd: `{"refresh_interval": "1s"}`},
-		{name: "Refresh interval and CA certificate chain", jd: `{"refresh_interval": "1s","ca_certificate_file": "foo"}`},
-		{name: "Refresh interval, private key and certificate chain", jd: `{"refresh_interval": "1s","certificate_file":"bar","private_key_file":"baz"}`},
-		{name: "Refresh interval, CA chain, private key and certificate chain", jd: `{"refresh_interval": "1s","ca_certificate_file":"foo","certificate_file":"bar","private_key_file":"baz"}`},
-		{name: "Unknown field", jd: `{"unknown_field": "foo"}`},
+		{
+			name: "Absent configuration",
+			jd:   `null`,
+		},
+		{
+			name: "Empty configuration",
+			jd:   `{}`,
+		},
+		{
+			name: "Only CA certificate chain",
+			jd:   fmt.Sprintf(`{"ca_certificate_file": "%s"}`, serverCaCert),
+		},
+		{
+			name: "Only private key and certificate chain",
+			jd:   fmt.Sprintf(`{"certificate_file":"%s","private_key_file":"%s"}`, serverCert, serverKey),
+		},
+		{
+			name: "CA chain, private key and certificate chain",
+			jd:   fmt.Sprintf(`{"ca_certificate_file":"%s","certificate_file":"%s","private_key_file":"%s"}`, serverCaCert, serverCert, serverKey),
+		},
+		{
+			name: "Only refresh interval", jd: `{"refresh_interval": "1s"}`,
+		},
+		{
+			name: "Refresh interval and CA certificate chain",
+			jd:   fmt.Sprintf(`{"refresh_interval": "1s","ca_certificate_file": "%s"}`, serverCaCert),
+		},
+		{
+			name: "Refresh interval, private key and certificate chain",
+			jd:   fmt.Sprintf(`{"refresh_interval": "1s","certificate_file":"%s","private_key_file":"%s"}`, serverCert, serverKey),
+		},
+		{
+			name: "Refresh interval, CA chain, private key and certificate chain",
+			jd:   fmt.Sprintf(`{"refresh_interval": "1s","ca_certificate_file":"%s","certificate_file":"%s","private_key_file":"%s"}`, serverCaCert, serverCert, serverKey),
+		},
+		{
+			name: "Unknown field",
+			jd:   `{"unknown_field": "foo"}`,
+		},
 	}
 
 	for _, test := range tests {
@@ -89,7 +121,7 @@ func (s) TestInvalidTlsBuilder(t *testing.T) {
 			wantErrPrefix: "failed to unmarshal config:"},
 		{
 			name:          "Missing private key",
-			jd:            `{"certificate_file":"bar"}`,
+			jd:            fmt.Sprintf(`{"certificate_file":"%s"}`, testdata.Path("x509/server_cert.pem")),
 			wantErrPrefix: "pemfile: private key file and identity cert file should be both specified or not specified",
 		},
 	}
