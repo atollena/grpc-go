@@ -39,11 +39,16 @@ type bundle struct {
 	transportCredentials credentials.TransportCredentials
 }
 
+type CloseableBundle interface {
+	credentials.Bundle
+	Close()
+}
+
 // NewBundle returns a credentials.Bundle which implements mTLS Credentials in xDS
 // Bootstrap File. It delegates certificate loading to a file_watcher provider
 // if either client certificates or server root CA is specified.
 // See gRFC A65: github.com/grpc/proposal/blob/master/A65-xds-mtls-creds-in-bootstrap.md
-func NewBundle(jd json.RawMessage) (credentials.Bundle, error) {
+func NewBundle(jd json.RawMessage) (CloseableBundle, error) {
 	cfg := &struct {
 		CertificateFile   string `json:"certificate_file"`
 		CACertificateFile string `json:"ca_certificate_file"`
@@ -95,6 +100,13 @@ func (t *bundle) NewWithMode(string) (credentials.Bundle, error) {
 	// This bundle has a single mode which only uses TLS transport credentials,
 	// so there is no legitimate case where callers would call NewWithMode.
 	return nil, fmt.Errorf("xDS TLS credentials only support one mode")
+}
+
+func (t *bundle) Close() {
+	cred, ok := t.transportCredentials.(*reloadingCreds)
+	if ok {
+		cred.provider.Close()
+	}
 }
 
 // reloadingCreds is a credentials.TransportCredentials for client

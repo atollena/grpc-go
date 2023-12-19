@@ -30,6 +30,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/internal/grpctest"
 	"google.golang.org/grpc/internal/stubserver"
 	"google.golang.org/grpc/internal/testutils/xds/e2e"
 	testgrpc "google.golang.org/grpc/interop/grpc_testing"
@@ -41,7 +42,15 @@ import (
 
 const defaultTestTimeout = 5 * time.Second
 
-func TestValidTlsBuilder(t *testing.T) {
+type s struct {
+	grpctest.Tester
+}
+
+func Test(t *testing.T) {
+	grpctest.RunSubTests(t, s{})
+}
+
+func (s) TestValidTlsBuilder(t *testing.T) {
 	tests := []struct {
 		name string
 		jd   string
@@ -61,14 +70,16 @@ func TestValidTlsBuilder(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			msg := json.RawMessage(test.jd)
-			if _, err := tlscreds.NewBundle(msg); err != nil {
+			if bundle, err := tlscreds.NewBundle(msg); err != nil {
 				t.Errorf("NewBundle(%s) returned error %s when expected to succeed", test.jd, err)
+			} else {
+				bundle.Close()
 			}
 		})
 	}
 }
 
-func TestInvalidTlsBuilder(t *testing.T) {
+func (s) TestInvalidTlsBuilder(t *testing.T) {
 	tests := []struct {
 		name, jd, wantErrPrefix string
 	}{
@@ -86,14 +97,15 @@ func TestInvalidTlsBuilder(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			msg := json.RawMessage(test.jd)
-			if _, err := tlscreds.NewBundle(msg); err == nil || !strings.HasPrefix(err.Error(), test.wantErrPrefix) {
+			if bundle, err := tlscreds.NewBundle(msg); err == nil || !strings.HasPrefix(err.Error(), test.wantErrPrefix) {
 				t.Errorf("NewBundle(%s): got error %s, want an error with prefix %s", msg, err, test.wantErrPrefix)
+				bundle.Close()
 			}
 		})
 	}
 }
 
-func TestCaReloading(t *testing.T) {
+func (s) TestCaReloading(t *testing.T) {
 	serverCa, err := os.ReadFile(testdata.Path("x509/server_ca_cert.pem"))
 	if err != nil {
 		t.Fatalf("Failed to read test CA cert: %s", err)
@@ -112,6 +124,7 @@ func TestCaReloading(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create TLS bundle: %v", err)
 	}
+	defer tlsBundle.Close()
 
 	serverCredentials := grpc.Creds(e2e.CreateServerTLSCredentials(t, tls.NoClientCert))
 	server := stubserver.StartTestService(t, nil, serverCredentials)
@@ -172,7 +185,7 @@ func TestCaReloading(t *testing.T) {
 	}
 }
 
-func TestMTLS(t *testing.T) {
+func (s) TestMTLS(t *testing.T) {
 	s := stubserver.StartTestService(t, nil, grpc.Creds(e2e.CreateServerTLSCredentials(t, tls.RequireAndVerifyClientCert)))
 	defer s.Stop()
 
@@ -188,6 +201,7 @@ func TestMTLS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create TLS bundle: %v", err)
 	}
+	defer tlsBundle.Close()
 	conn, err := grpc.Dial(s.Address, grpc.WithCredentialsBundle(tlsBundle), grpc.WithAuthority("x.test.example.com"))
 	if err != nil {
 		t.Fatalf("Error dialing: %v", err)
