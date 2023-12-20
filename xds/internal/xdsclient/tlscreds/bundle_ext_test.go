@@ -51,9 +51,9 @@ func Test(t *testing.T) {
 }
 
 func (s) TestValidTlsBuilder(t *testing.T) {
-	serverCaCert := testdata.Path("x509/server_ca_cert.pem")
-	serverCert := testdata.Path("x509/server_cert.pem")
-	serverKey := testdata.Path("x509/server_key.pem")
+	caCert := testdata.Path("x509/server_ca_cert.pem")
+	clientCert := testdata.Path("x509/client1_cert.pem")
+	clientKey := testdata.Path("x509/client1_key.pem")
 	tests := []struct {
 		name string
 		jd   string
@@ -68,30 +68,30 @@ func (s) TestValidTlsBuilder(t *testing.T) {
 		},
 		{
 			name: "Only CA certificate chain",
-			jd:   fmt.Sprintf(`{"ca_certificate_file": "%s"}`, serverCaCert),
+			jd:   fmt.Sprintf(`{"ca_certificate_file": "%s"}`, caCert),
 		},
 		{
 			name: "Only private key and certificate chain",
-			jd:   fmt.Sprintf(`{"certificate_file":"%s","private_key_file":"%s"}`, serverCert, serverKey),
+			jd:   fmt.Sprintf(`{"certificate_file":"%s","private_key_file":"%s"}`, clientCert, clientKey),
 		},
 		{
 			name: "CA chain, private key and certificate chain",
-			jd:   fmt.Sprintf(`{"ca_certificate_file":"%s","certificate_file":"%s","private_key_file":"%s"}`, serverCaCert, serverCert, serverKey),
+			jd:   fmt.Sprintf(`{"ca_certificate_file":"%s","certificate_file":"%s","private_key_file":"%s"}`, caCert, clientCert, clientKey),
 		},
 		{
 			name: "Only refresh interval", jd: `{"refresh_interval": "1s"}`,
 		},
 		{
 			name: "Refresh interval and CA certificate chain",
-			jd:   fmt.Sprintf(`{"refresh_interval": "1s","ca_certificate_file": "%s"}`, serverCaCert),
+			jd:   fmt.Sprintf(`{"refresh_interval": "1s","ca_certificate_file": "%s"}`, caCert),
 		},
 		{
 			name: "Refresh interval, private key and certificate chain",
-			jd:   fmt.Sprintf(`{"refresh_interval": "1s","certificate_file":"%s","private_key_file":"%s"}`, serverCert, serverKey),
+			jd:   fmt.Sprintf(`{"refresh_interval": "1s","certificate_file":"%s","private_key_file":"%s"}`, clientCert, clientKey),
 		},
 		{
 			name: "Refresh interval, CA chain, private key and certificate chain",
-			jd:   fmt.Sprintf(`{"refresh_interval": "1s","ca_certificate_file":"%s","certificate_file":"%s","private_key_file":"%s"}`, serverCaCert, serverCert, serverKey),
+			jd:   fmt.Sprintf(`{"refresh_interval": "1s","ca_certificate_file":"%s","certificate_file":"%s","private_key_file":"%s"}`, caCert, clientCert, clientKey),
 		},
 		{
 			name: "Unknown field",
