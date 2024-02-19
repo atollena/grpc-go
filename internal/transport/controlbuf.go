@@ -538,6 +538,7 @@ const minBatchSize = 1000
 // flushes the underlying connection.  The connection is always left open to
 // allow different closing behavior on the client and server.
 func (l *loopyWriter) run() (err error) {
+
 	defer func() {
 		if l.logger.V(logLevel) {
 			l.logger.Infof("loopyWriter exiting with error: %v", err)
@@ -555,43 +556,51 @@ func (l *loopyWriter) run() (err error) {
 		if err = l.handle(it); err != nil {
 			return err
 		}
-		if _, err = l.processData(); err != nil {
+		err = l.process()
+		if err != nil {
 			return err
 		}
-		gosched := true
-	hasdata:
-		for {
-			it, err := l.cbuf.get(false)
-			if err != nil {
-				return err
-			}
-			if it != nil {
-				if err = l.handle(it); err != nil {
-					return err
-				}
-				if _, err = l.processData(); err != nil {
-					return err
-				}
-				continue hasdata
-			}
-			isEmpty, err := l.processData()
-			if err != nil {
-				return err
-			}
-			if !isEmpty {
-				continue hasdata
-			}
-			if gosched {
-				gosched = false
-				if l.framer.writer.offset < minBatchSize {
-					runtime.Gosched()
-					continue hasdata
-				}
-			}
-			l.framer.writer.Flush()
-			break hasdata
-		}
 	}
+}
+
+func (l *loopyWriter) process() error {
+	var localBuf [http2MaxFrameLen]byte
+	if _, err := l.processData(localBuf); err != nil {
+		return err
+	}
+	gosched := true
+	for {
+		it, err := l.cbuf.get(false)
+		if err != nil {
+			return err
+		}
+		if it != nil {
+			if err = l.handle(it); err != nil {
+				return err
+			}
+			if _, err = l.processData(localBuf); err != nil {
+				return err
+			}
+			continue
+		}
+		isEmpty, err := l.processData(localBuf)
+		if err != nil {
+			return err
+		}
+		if !isEmpty {
+			continue
+		}
+		if gosched {
+			gosched = false
+			if l.framer.writer.offset < minBatchSize {
+				runtime.Gosched()
+				continue
+			}
+		}
+		l.framer.writer.Flush()
+		break
+	}
+	return nil
 }
 
 func (l *loopyWriter) outgoingWindowUpdateHandler(w *outgoingWindowUpdate) error {
@@ -891,7 +900,7 @@ func (l *loopyWriter) applySettings(ss []http2.Setting) {
 // processData removes the first stream from active streams, writes out at most 16KB
 // of its data and then puts it at the end of activeStreams if there's still more data
 // to be sent and stream has some stream-level flow control.
-func (l *loopyWriter) processData() (bool, error) {
+func (l *loopyWriter) processData(localBuf [http2MaxFrameLen]byte) (bool, error) {
 	if l.sendQuota == 0 {
 		return true, nil
 	}
@@ -949,7 +958,6 @@ func (l *loopyWriter) processData() (bool, error) {
 		} else {
 			// We can add some data to grpc message header to distribute bytes more equally across frames.
 			// Copy on the stack to avoid generating garbage
-			var localBuf [http2MaxFrameLen]byte
 			copy(localBuf[:hSize], dataItem.h)
 			copy(localBuf[hSize:], dataItem.d[:dSize])
 			buf = localBuf[:hSize+dSize]
