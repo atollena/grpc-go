@@ -891,6 +891,8 @@ func (l *loopyWriter) applySettings(ss []http2.Setting) {
 // processData removes the first stream from active streams, writes out at most 16KB
 // of its data and then puts it at the end of activeStreams if there's still more data
 // to be sent and stream has some stream-level flow control.
+//
+//go:noinline
 func (l *loopyWriter) processData() (bool, error) {
 	if l.sendQuota == 0 {
 		return true, nil
