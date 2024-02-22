@@ -150,6 +150,9 @@ type http2Client struct {
 
 	connectionID uint64
 	logger       *grpclog.PrefixLogger
+
+	// XXX
+	framePool *sync.Pool
 }
 
 func dial(ctx context.Context, fn func(context.Context, string) (net.Conn, error), addr resolver.Address, useProxy bool, grpcUA string) (net.Conn, error) {
@@ -350,6 +353,11 @@ func newHTTP2Client(connectCtx, ctx context.Context, addr resolver.Address, opts
 		keepaliveEnabled:      keepaliveEnabled,
 		bufferPool:            newBufferPool(),
 		onClose:               onClose,
+		framePool: &sync.Pool{
+			New: func() interface{} {
+				return make([]byte, http2MaxFrameLen)
+			},
+		},
 	}
 	t.logger = prefixLoggerForClientTransport(t)
 	// Add peer information to the http2client context.
@@ -450,7 +458,7 @@ func newHTTP2Client(connectCtx, ctx context.Context, addr resolver.Address, opts
 		return nil, err
 	}
 	go func() {
-		t.loopy = newLoopyWriter(clientSide, t.framer, t.controlBuf, t.bdpEst, t.conn, t.logger)
+		t.loopy = newLoopyWriter(clientSide, t.framer, t.controlBuf, t.bdpEst, t.conn, t.logger, t.framePool)
 		if err := t.loopy.run(); !isIOError(err) {
 			// Immediately close the connection, as the loopy writer returns
 			// when there are no more active streams and we were draining (the

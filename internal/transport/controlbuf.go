@@ -490,12 +490,13 @@ type loopyWriter struct {
 	draining      bool
 	conn          net.Conn
 	logger        *grpclog.PrefixLogger
+	pool          *sync.Pool // arrays of 16KiB
 
 	// Side-specific handlers
 	ssGoAwayHandler func(*goAway) (bool, error)
 }
 
-func newLoopyWriter(s side, fr *framer, cbuf *controlBuffer, bdpEst *bdpEstimator, conn net.Conn, logger *grpclog.PrefixLogger) *loopyWriter {
+func newLoopyWriter(s side, fr *framer, cbuf *controlBuffer, bdpEst *bdpEstimator, conn net.Conn, logger *grpclog.PrefixLogger, pool *sync.Pool) *loopyWriter {
 	var buf bytes.Buffer
 	l := &loopyWriter{
 		side:          s,
@@ -510,6 +511,7 @@ func newLoopyWriter(s side, fr *framer, cbuf *controlBuffer, bdpEst *bdpEstimato
 		bdpEst:        bdpEst,
 		conn:          conn,
 		logger:        logger,
+		pool:          pool,
 	}
 	return l
 }
@@ -949,10 +951,11 @@ func (l *loopyWriter) processData() (bool, error) {
 		} else {
 			// We can add some data to grpc message header to distribute bytes more equally across frames.
 			// Copy on the stack to avoid generating garbage
-			var localBuf [http2MaxFrameLen]byte
+			localBuf := l.pool.Get().([]byte)
 			copy(localBuf[:hSize], dataItem.h)
 			copy(localBuf[hSize:], dataItem.d[:dSize])
 			buf = localBuf[:hSize+dSize]
+			l.pool.Put(localBuf)
 		}
 	} else {
 		buf = dataItem.d

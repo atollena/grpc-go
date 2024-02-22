@@ -130,6 +130,9 @@ type http2Server struct {
 	maxStreamID uint32 // max stream ID ever seen
 
 	logger *grpclog.PrefixLogger
+
+	// XXX
+	framePool *sync.Pool
 }
 
 // NewServerTransport creates a http2 transport with conn and configuration
@@ -264,6 +267,11 @@ func NewServerTransport(conn net.Conn, config *ServerConfig) (_ ServerTransport,
 		initialWindowSize: iwz,
 		czData:            new(channelzData),
 		bufferPool:        newBufferPool(),
+		framePool: &sync.Pool{
+			New: func() any {
+				return make([]byte, http2MaxFrameLen)
+			},
+		},
 	}
 	t.logger = prefixLoggerForServerTransport(t)
 
@@ -320,7 +328,7 @@ func NewServerTransport(conn net.Conn, config *ServerConfig) (_ ServerTransport,
 	t.handleSettings(sf)
 
 	go func() {
-		t.loopy = newLoopyWriter(serverSide, t.framer, t.controlBuf, t.bdpEst, t.conn, t.logger)
+		t.loopy = newLoopyWriter(serverSide, t.framer, t.controlBuf, t.bdpEst, t.conn, t.logger, t.framePool)
 		t.loopy.ssGoAwayHandler = t.outgoingGoAwayHandler
 		err := t.loopy.run()
 		close(t.loopyWriterDone)
