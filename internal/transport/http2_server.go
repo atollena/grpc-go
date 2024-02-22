@@ -135,6 +135,7 @@ type http2Server struct {
 	framePool *sync.Pool
 }
 
+// go:noinline
 func alloc() any {
 	// Note that we don't want to use slices here, because `Put` requires
 	// allocating the slice header, which has visible performance impact.
