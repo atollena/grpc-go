@@ -951,7 +951,7 @@ func (l *loopyWriter) processData() (bool, error) {
 		} else {
 			// We can add some data to grpc message header to distribute bytes more equally across frames.
 			// Copy on the stack to avoid generating garbage
-			localBuf := l.pool.Get().([]byte)
+			localBuf := l.pool.Get().(*[http2MaxFrameLen]byte)
 			copy(localBuf[:hSize], dataItem.h)
 			copy(localBuf[hSize:], dataItem.d[:dSize])
 			buf = localBuf[:hSize+dSize]

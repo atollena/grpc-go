@@ -135,6 +135,12 @@ type http2Server struct {
 	framePool *sync.Pool
 }
 
+func alloc() any {
+	// Note that we don't want to use slices here, because `Put` requires
+	// allocating the slice header, which has visible performance impact.
+	return new([http2MaxFrameLen]byte)
+}
+
 // NewServerTransport creates a http2 transport with conn and configuration
 // options from config.
 //
@@ -268,9 +274,7 @@ func NewServerTransport(conn net.Conn, config *ServerConfig) (_ ServerTransport,
 		czData:            new(channelzData),
 		bufferPool:        newBufferPool(),
 		framePool: &sync.Pool{
-			New: func() any {
-				return make([]byte, http2MaxFrameLen)
-			},
+			New: alloc,
 		},
 	}
 	t.logger = prefixLoggerForServerTransport(t)

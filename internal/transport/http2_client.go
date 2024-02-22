@@ -354,9 +354,7 @@ func newHTTP2Client(connectCtx, ctx context.Context, addr resolver.Address, opts
 		bufferPool:            newBufferPool(),
 		onClose:               onClose,
 		framePool: &sync.Pool{
-			New: func() interface{} {
-				return make([]byte, http2MaxFrameLen)
-			},
+			New: alloc,
 		},
 	}
 	t.logger = prefixLoggerForClientTransport(t)
