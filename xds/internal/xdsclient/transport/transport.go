@@ -369,6 +369,13 @@ func (t *Transport) send(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case stream = <-t.adsStreamCh:
+			// Make sure we never create empty subscriptions on new streams.
+			for url, resources := range t.resources {
+				if len(resources) == 0 {
+					delete(t.resources, url)
+				}
+			}
+
 			// We have a new stream and we've to ensure that the node proto gets
 			// sent out in the first request on the stream. At this point, we
 			// might not have any registered watches. Setting this field to true
