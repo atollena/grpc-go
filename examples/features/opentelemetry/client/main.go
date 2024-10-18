@@ -23,8 +23,9 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/sdk/metric"
 	"log"
-	"net/http"
 	"time"
 
 	"google.golang.org/grpc"
@@ -32,26 +33,28 @@ import (
 	"google.golang.org/grpc/examples/features/proto/echo"
 	"google.golang.org/grpc/stats/opentelemetry"
 
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.opentelemetry.io/otel/exporters/prometheus"
-	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 )
 
 var (
-	addr               = flag.String("addr", ":50051", "the server address to connect to")
-	prometheusEndpoint = flag.String("prometheus_endpoint", ":9465", "the Prometheus exporter endpoint")
+	addr = flag.String("addr", ":50051", "the server address to connect to")
 )
 
 func main() {
-	exporter, err := prometheus.New()
-	if err != nil {
-		log.Fatalf("Failed to start prometheus exporter: %v", err)
-	}
-	provider := metric.NewMeterProvider(metric.WithReader(exporter))
-	go http.ListenAndServe(*prometheusEndpoint, promhttp.Handler())
-
 	ctx := context.Background()
-	do := opentelemetry.DialOption(opentelemetry.Options{MetricsOptions: opentelemetry.MetricsOptions{MeterProvider: provider}})
+	exp, err := otlpmetricgrpc.New(ctx)
+	if err != nil {
+		panic(err)
+	}
+	meterProvider := metric.NewMeterProvider(metric.WithReader(metric.NewPeriodicReader(exp)))
+	defer func() {
+		if err := meterProvider.Shutdown(ctx); err != nil {
+			panic(err)
+		}
+	}()
+	otel.SetMeterProvider(meterProvider)
+
+	do := opentelemetry.DialOption(opentelemetry.Options{MetricsOptions: opentelemetry.MetricsOptions{MeterProvider: meterProvider}})
 
 	cc, err := grpc.NewClient(*addr, grpc.WithTransportCredentials(insecure.NewCredentials()), do)
 	if err != nil {
