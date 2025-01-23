@@ -28,11 +28,13 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	pb "google.golang.org/grpc/examples/features/proto/echo"
 	_ "google.golang.org/grpc/health"
 	"google.golang.org/grpc/resolver"
 	"google.golang.org/grpc/resolver/manual"
+	"google.golang.org/grpc/status"
 )
 
 var serviceConfig = `{
@@ -53,14 +55,23 @@ func callUnaryEcho(c pb.EchoClient) {
 	}
 }
 
+type rpccreds struct{}
+
+func (r *rpccreds) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
+	return nil, status.Error(codes.Unauthenticated, "per rpc creds error")
+}
+
+func (r *rpccreds) RequireTransportSecurity() bool {
+	return false
+}
+
 func main() {
 	flag.Parse()
 
 	r := manual.NewBuilderWithScheme("whatever")
 	r.InitialState(resolver.State{
 		Addresses: []resolver.Address{
-			{Addr: "localhost:50051"},
-			{Addr: "localhost:50052"},
+			{Addr: "127.0.0.1:50051"},
 		},
 	})
 
@@ -68,9 +79,9 @@ func main() {
 
 	options := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
 		grpc.WithResolvers(r),
 		grpc.WithDefaultServiceConfig(serviceConfig),
+		grpc.WithPerRPCCredentials(&rpccreds{}),
 	}
 
 	conn, err := grpc.NewClient(address, options...)

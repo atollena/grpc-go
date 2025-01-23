@@ -73,6 +73,7 @@ retryConnection:
 		setConnectivityState(connectivity.Connecting, nil)
 		rawS, err := newStream(healthCheckMethod)
 		if err != nil {
+			setConnectivityState(connectivity.TransientFailure, fmt.Errorf("connection active but failed to create health check stream: %v", err))
 			continue retryConnection
 		}
 
