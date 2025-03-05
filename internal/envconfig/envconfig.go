@@ -55,6 +55,10 @@ var (
 	// setting the environment variable "GRPC_EXPERIMENTAL_ENABLE_NEW_PICK_FIRST"
 	// to "false".
 	NewPickFirstEnabled = boolFromEnv("GRPC_EXPERIMENTAL_ENABLE_NEW_PICK_FIRST", true)
+
+	// XDSEndpointHashKeyBackwardCompat is set to true if we should not parse
+	// the xds endpoint hash key from EDS LbEndpoint metadata.
+	XDSEndpointHashKeyBackwardCompat = boolFromEnv("GRPC_XDS_ENDPOINT_HASH_KEY_BACKWARD_COMPAT", false)
 )
 
 func boolFromEnv(envVar string, def bool) bool {

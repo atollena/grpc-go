@@ -34,7 +34,7 @@ type picker struct {
 	// with access guarded by `ringhashBalancer.mu`. The `endpointStates` cache
 	// in the picker helps avoid locking the ringhash balancer's mutex when
 	// reading the latest state at RPC time.
-	endpointStates map[string]balancer.State // endpointState.firstAddr -> balancer.State
+	endpointStates map[string]balancer.State // endpointState.hashKey -> balancer.State
 }
 
 func (p *picker) Pick(info balancer.PickInfo) (balancer.PickResult, error) {
@@ -61,5 +61,5 @@ func (p *picker) Pick(info balancer.PickInfo) (balancer.PickResult, error) {
 }
 
 func (p *picker) balancerState(e *ringEntry) balancer.State {
-	return p.endpointStates[e.firstAddr]
+	return p.endpointStates[e.hashKey]
 }

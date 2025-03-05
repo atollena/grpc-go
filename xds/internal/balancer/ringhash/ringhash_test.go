@@ -216,7 +216,7 @@ func (s) TestThreeSubConnsAffinity(t *testing.T) {
 		t.Fatalf("Timed out waiting for SubConn creation.")
 	case subConns[1] = <-cc.NewSubConnCh:
 	}
-	if got, want := subConns[1].Addresses[0].Addr, ring.items[1].firstAddr; got != want {
+	if got, want := subConns[1].Addresses[0].Addr, ring.items[1].hashKey; got != want {
 		t.Fatalf("SubConn.Address = %v, want = %v", got, want)
 	}
 	select {
@@ -224,7 +224,7 @@ func (s) TestThreeSubConnsAffinity(t *testing.T) {
 	case <-time.After(defaultTestTimeout):
 		t.Errorf("timeout waiting for Connect() from SubConn %v", subConns[1])
 	}
-	delete(remainingAddrs, ring.items[1].firstAddr)
+	delete(remainingAddrs, ring.items[1].hashKey)
 
 	// Turn down the subConn in use.
 	subConns[1].UpdateState(balancer.SubConnState{ConnectivityState: connectivity.Connecting})
@@ -248,9 +248,9 @@ func (s) TestThreeSubConnsAffinity(t *testing.T) {
 	case <-time.After(defaultTestTimeout):
 		t.Errorf("timeout waiting for Connect() from SubConn %v", subConns[1])
 	}
-	if scAddr == ring.items[0].firstAddr {
+	if scAddr == ring.items[0].hashKey {
 		subConns[0] = sc
-	} else if scAddr == ring.items[2].firstAddr {
+	} else if scAddr == ring.items[2].hashKey {
 		subConns[2] = sc
 	}
 
@@ -273,9 +273,9 @@ func (s) TestThreeSubConnsAffinity(t *testing.T) {
 	case <-time.After(defaultTestTimeout):
 		t.Errorf("timeout waiting for Connect() from SubConn %v", subConns[1])
 	}
-	if scAddr == ring.items[0].firstAddr {
+	if scAddr == ring.items[0].hashKey {
 		subConns[0] = sc
-	} else if scAddr == ring.items[2].firstAddr {
+	} else if scAddr == ring.items[2].hashKey {
 		subConns[2] = sc
 	}
 	sc.UpdateState(balancer.SubConnState{ConnectivityState: connectivity.Connecting})
@@ -356,7 +356,7 @@ func (s) TestThreeBackendsAffinityMultiple(t *testing.T) {
 		t.Fatalf("Timed out waiting for SubConn creation.")
 	case sc0 = <-cc.NewSubConnCh:
 	}
-	if got, want := sc0.Addresses[0].Addr, ring0.items[1].firstAddr; got != want {
+	if got, want := sc0.Addresses[0].Addr, ring0.items[1].hashKey; got != want {
 		t.Fatalf("SubConn.Address = %v, want = %v", got, want)
 	}
 	select {
@@ -393,7 +393,7 @@ func (s) TestThreeBackendsAffinityMultiple(t *testing.T) {
 		t.Fatalf("Timed out waiting for SubConn creation.")
 	case sc1 = <-cc.NewSubConnCh:
 	}
-	if got, want := sc1.Addresses[0].Addr, ring0.items[2].firstAddr; got != want {
+	if got, want := sc1.Addresses[0].Addr, ring0.items[2].hashKey; got != want {
 		t.Fatalf("SubConn.Address = %v, want = %v", got, want)
 	}
 	select {
@@ -504,14 +504,14 @@ func (s) TestAddrWeightChange(t *testing.T) {
 		t.Fatalf("new picker after changing address weight has %d entries, want 3", len(p3.(*picker).ring.items))
 	}
 	for _, i := range p3.(*picker).ring.items {
-		if i.firstAddr == testBackendAddrStrs[0] {
+		if i.hashKey == testBackendAddrStrs[0] {
 			if i.weight != 1 {
-				t.Fatalf("new picker after changing address weight has weight %d for %v, want 1", i.weight, i.firstAddr)
+				t.Fatalf("new picker after changing address weight has weight %d for %v, want 1", i.weight, i.hash)
 			}
 		}
-		if i.firstAddr == testBackendAddrStrs[1] {
+		if i.hashKey == testBackendAddrStrs[1] {
 			if i.weight != 2 {
-				t.Fatalf("new picker after changing address weight has weight %d for %v, want 2", i.weight, i.firstAddr)
+				t.Fatalf("new picker after changing address weight has weight %d for %v, want 2", i.weight, i.hash)
 			}
 		}
 	}

@@ -66,9 +66,9 @@ func testRingAndEndpointStates(states []connectivity.State) (*ring, map[string]b
 	for i, st := range states {
 		testSC := testSubConns[i]
 		items = append(items, &ringEntry{
-			idx:       i,
-			hash:      uint64((i + 1) * 10),
-			firstAddr: testSC.String(),
+			idx:     i,
+			hash:    uint64((i + 1) * 10),
+			hashKey: testSC.String(),
 		})
 		epState := balancer.State{
 			ConnectivityState: st,
