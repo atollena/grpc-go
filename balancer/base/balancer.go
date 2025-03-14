@@ -190,7 +190,7 @@ func (b *baseBalancer) UpdateSubConnState(sc balancer.SubConn, state balancer.Su
 func (b *baseBalancer) updateSubConnState(sc balancer.SubConn, state balancer.SubConnState) {
 	s := state.ConnectivityState
 	if logger.V(2) {
-		logger.Infof("base.baseBalancer: handle SubConn state change: %p, %v", sc, s)
+		// logger.Infof("base.baseBalancer: handle SubConn state change: %p, %v", sc, s)
 	}
 	oldS, ok := b.scStates[sc]
 	if !ok {

@@ -23,9 +23,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"google.golang.org/grpc/health"
+	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/keepalive"
 	"log"
 	"net"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"google.golang.org/grpc"
 
@@ -33,25 +38,38 @@ import (
 )
 
 var (
-	addrs = []string{":50051", ":50052"}
+	addrs = []string{}
 )
 
 type ecServer struct {
 	pb.UnimplementedEchoServer
 	addr string
+	i    *uint64
+}
+
+func init() {
+	for i := 0; i < 3000; i++ {
+		addrs = append(addrs, fmt.Sprintf("localhost:%d", 25000+i))
+	}
 }
 
 func (s *ecServer) UnaryEcho(_ context.Context, req *pb.EchoRequest) (*pb.EchoResponse, error) {
+	atomic.AddUint64(s.i, 1)
 	return &pb.EchoResponse{Message: fmt.Sprintf("%s (from %s)", req.Message, s.addr)}, nil
 }
 
-func startServer(addr string) {
+func startServer(addr string, i *uint64) {
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
-	s := grpc.NewServer()
-	pb.RegisterEchoServer(s, &ecServer{addr: addr})
+	s := grpc.NewServer(
+		grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: 1 * time.Minute}),
+	)
+	healthcheck := health.NewServer()
+	healthcheck.SetServingStatus("", healthgrpc.HealthCheckResponse_SERVING)
+	healthgrpc.RegisterHealthServer(s, healthcheck)
+	pb.RegisterEchoServer(s, &ecServer{addr: addr, i: i})
 	log.Printf("serving on %s\n", addr)
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
@@ -60,12 +78,16 @@ func startServer(addr string) {
 
 func main() {
 	var wg sync.WaitGroup
+	var i uint64
 	for _, addr := range addrs {
 		wg.Add(1)
 		go func(addr string) {
 			defer wg.Done()
-			startServer(addr)
+			startServer(addr, &i)
 		}(addr)
 	}
-	wg.Wait()
+	t := time.NewTicker(time.Minute)
+	for range t.C {
+		log.Printf("Received %d RPCs", atomic.SwapUint64(&i, 0))
+	}
 }

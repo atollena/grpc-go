@@ -1316,7 +1316,7 @@ func (ac *addrConn) tryAllAddrs(ctx context.Context, addrs []resolver.Address, c
 		}
 		ac.mu.Unlock()
 
-		channelz.Infof(logger, ac.channelz, "Subchannel picks a new address %q to connect", addr.Addr)
+		// channelz.Infof(logger, ac.channelz, "Subchannel picks a new address %q to connect", addr.Addr)
 
 		err := ac.createTransport(ctx, addr, copts, connectDeadline)
 		if err == nil {

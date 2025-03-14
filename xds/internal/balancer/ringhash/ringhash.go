@@ -364,7 +364,7 @@ func (b *ringhashBalancer) UpdateSubConnState(sc balancer.SubConn, state balance
 func (b *ringhashBalancer) updateSubConnState(sc balancer.SubConn, state balancer.SubConnState) {
 	s := state.ConnectivityState
 	if logger.V(2) {
-		b.logger.Infof("Handle SubConn state change: %p, %v", sc, s)
+		// b.logger.Infof("Handle SubConn state change: %p, %v", sc, s)
 	}
 	scs, ok := b.scStates[sc]
 	if !ok {

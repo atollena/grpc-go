@@ -24,12 +24,15 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	ecpb "google.golang.org/grpc/examples/features/proto/echo"
+	_ "google.golang.org/grpc/health"
 	"google.golang.org/grpc/resolver"
+	_ "google.golang.org/grpc/xds"
 )
 
 const (
@@ -37,45 +40,51 @@ const (
 	exampleServiceName = "lb.example.grpc.io"
 )
 
-var addrs = []string{"localhost:50051", "localhost:50052"}
+var addrs = []string{}
+
+func init() {
+	for i := 0; i < 3000; i++ {
+		addrs = append(addrs, fmt.Sprintf("localhost:%d", 25000+i))
+	}
+}
 
 func callUnaryEcho(c ecpb.EchoClient, message string) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	r, err := c.UnaryEcho(ctx, &ecpb.EchoRequest{Message: message})
+	_, err := c.UnaryEcho(ctx, &ecpb.EchoRequest{Message: message})
 	if err != nil {
-		log.Fatalf("could not greet: %v", err)
+		log.Printf("could not greet: %v", err)
 	}
-	fmt.Println(r.Message)
 }
 
-func makeRPCs(cc *grpc.ClientConn, n int) {
+func makeRPCs(cc *grpc.ClientConn) {
 	hwc := ecpb.NewEchoClient(cc)
-	for i := 0; i < n; i++ {
-		callUnaryEcho(hwc, "this is examples/load_balancing")
+	var i uint64
+	go func() {
+		t := time.NewTicker(1 * time.Minute)
+		for range t.C {
+			log.Printf("sent %d RPCs", atomic.SwapUint64(&i, 0))
+		}
+	}()
+	t := time.NewTicker(15 * time.Second)
+	for range t.C {
+		log.Printf("sending %d RPCs", len(addrs))
+		for j := 1; j <= len(addrs); j++ {
+			callUnaryEcho(hwc, "this is examples/load_balancing")
+			atomic.AddUint64(&i, 1)
+		}
 	}
 }
 
 func main() {
-	// "pick_first" is the default, so there's no need to set the load balancing policy.
-	pickfirstConn, err := grpc.NewClient(
+	// Make a ClientConn with round_robin policy.
+	roundrobinConn, err := grpc.Dial(
 		fmt.Sprintf("%s:///%s", exampleScheme, exampleServiceName),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		log.Fatalf("did not connect: %v", err)
-	}
-	defer pickfirstConn.Close()
-
-	fmt.Println("--- calling helloworld.Greeter/SayHello with pick_first ---")
-	makeRPCs(pickfirstConn, 10)
-
-	fmt.Println()
-
-	// Make another ClientConn with round_robin policy.
-	roundrobinConn, err := grpc.NewClient(
-		fmt.Sprintf("%s:///%s", exampleScheme, exampleServiceName),
-		grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"round_robin":{}}]}`), // This sets the initial balancing policy.
+		grpc.WithDefaultServiceConfig(`
+{"loadBalancingConfig": [{"outlier_detection_experimental": {
+					"childPolicy": [{"round_robin": {}}]}}],
+"healthCheckConfig": {"serviceName":""}
+}`), // This sets the initial balancing policy.
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
@@ -84,7 +93,7 @@ func main() {
 	defer roundrobinConn.Close()
 
 	fmt.Println("--- calling helloworld.Greeter/SayHello with round_robin ---")
-	makeRPCs(roundrobinConn, 10)
+	makeRPCs(roundrobinConn)
 }
 
 // Following is an example name resolver implementation. Read the name
@@ -119,8 +128,9 @@ func (r *exampleResolver) start() {
 	}
 	r.cc.UpdateState(resolver.State{Addresses: addrs})
 }
-func (*exampleResolver) ResolveNow(resolver.ResolveNowOptions) {}
-func (*exampleResolver) Close()                                {}
+func (*exampleResolver) ResolveNow(resolver.ResolveNowOptions) {
+}
+func (*exampleResolver) Close() {}
 
 func init() {
 	resolver.Register(&exampleResolverBuilder{})
