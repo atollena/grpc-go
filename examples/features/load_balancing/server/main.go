@@ -26,15 +26,26 @@ import (
 	"log"
 	"net"
 	"sync"
+	"time"
+
+	"google.golang.org/grpc/keepalive"
 
 	"google.golang.org/grpc"
 
 	pb "google.golang.org/grpc/examples/features/proto/echo"
 )
 
+const n = 2000
+
 var (
-	addrs = []string{":50051", ":50052"}
+	addrs = []string{}
 )
+
+func init() {
+	for i := 0; i < n; i++ {
+		addrs = append(addrs, fmt.Sprintf("localhost:%d", 25000+i))
+	}
+}
 
 type ecServer struct {
 	pb.UnimplementedEchoServer
@@ -50,7 +61,9 @@ func startServer(addr string) {
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
-	s := grpc.NewServer()
+	s := grpc.NewServer(
+		grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: 15 * time.Second}),
+	)
 	pb.RegisterEchoServer(s, &ecServer{addr: addr})
 	log.Printf("serving on %s\n", addr)
 	if err := s.Serve(lis); err != nil {
